@@ -3,44 +3,45 @@
 import os
 import subprocess
 
+from MessageUtils import ConsoleLogger
+
 class RpmPackageHandler:
 	"""
 	This class handles RPM package
 	"""
 
 	def __init__(self):
+		self.logger = ConsoleLogger.get_instance()
 		self._find_tools()
 		self._pkg_list = set()
 		self._dep_list = {}
-		self._name_full_name_list = {}
-		self._full_name_name_list = {}
+		self._query_full_name_cache = {}
+		self._query_name_cache = {}
 
 	def query_full_name(self, pkg_name):
-		if pkg_name in self._name_full_name_list:
-			return self._name_full_name_list[pkg_name]
+		if pkg_name in self._query_full_name_cache:
+			return self._query_full_name_cache[pkg_name]
 		try:
 			pkg_full_name = self._exec(self._cmd_rpm + ' -q "' + pkg_name + '"')
-			self._name_full_name_list[pkg_name] = pkg_full_name
-			return self._name_full_name_list[pkg_name]
+			self._query_full_name_cache[pkg_name] = pkg_full_name
+			return self._query_full_name_cache[pkg_name]
 		except subprocess.CalledProcessError as e:
-			print 'ERROR : ' + pkg_name + ' NOT installed on the system'
-			print e
-			return None;
+			self.logger.error(pkg_name + ' NOT installed on the system')
+			return None
 
 	def query_name(self, query_name):
-		if query_name in self._full_name_name_list:
-			return self._full_name_name_list[query_name]
+		if query_name in self._query_name_cache:
+			return self._query_name_cache[query_name]
 		try:
 			pkg_name = self._exec(self._cmd_rpm + ' -q "' + query_name + '"')
-			self._full_name_name_list[query_name] = pkg_name
-			return self._full_name_name_list[query_name]
+			self._query_name_cache[query_name] = pkg_name
+			return self._query_name_cache[query_name]
 		except subprocess.CalledProcessError as e:
-			print 'ERROR : ' + query_name + ' NOT installed on the system'
-			print e
-			return None;
+			self.logger.error(query_name + ' NOT installed on the system')
+			return None
 
 	def show_deps(self, packages):
-		pkgs = [];
+		pkgs = []
 		for pkg_name in packages:
 			pkg = self._get_rpm_pkg(pkg_name)
 			if pkg is None:
@@ -48,7 +49,7 @@ class RpmPackageHandler:
 				self._pkg_list.add(pkg)
 			full_name = self.query_full_name(pkg_name)
 			if full_name is None:
-				continue;
+				continue
 			pkg.set_full_name(full_name)
 			pkgs.append(pkg)
 			self._get_dep_pkgs(pkg)
@@ -56,16 +57,16 @@ class RpmPackageHandler:
 	def get_a_provide_pkg(self, req):
 		dep_query_str = self._trim_dep_version(req)
 		if dep_query_str in self._dep_list:
-			return self._dep_list[dep_query_str];
+			return self._dep_list[dep_query_str]
 		try:
 			provide_pkgs = self._exec(self._cmd_rpm + ' -q --whatprovides "' + dep_query_str + '"')
 			if provide_pkgs is None or len(provide_pkgs.strip()) == 0:
-				print 'WARN: No package provides dependency ' + req
+				self.logger.warn('No package provides dependency ' + req)
 				return None
 			self._dep_list[dep_query_str] = provide_pkgs.strip().splitlines()[0]
 			return self._dep_list[dep_query_str]
 		except subprocess.CalledProcessError as e:
-			print 'ERROR: Cannot get packages which provides requirement ' + req
+			self.logger.error('Cannot get packages which provides requirement ' + req)
 			return None
 
 	def _get_dep_pkgs(self, pkg):
@@ -95,14 +96,12 @@ class RpmPackageHandler:
 
 			dep_obj.add_required_by(req)
 
-		print 'Handling dependency for ' + pkg.get_name()
 		for dep in pkg.get_dep_pkgs():
 			required_by = ''
 			for req in dep.required_by:
 				if len(required_by) > 0:
 					required_by += ', '
 				required_by += req
-			print ' - ' + dep.pkg.get_name() + ' (' + required_by + ')'
 
 	def _get_rpm_pkg(self, pkg_name):
 		for p in self._pkg_list:
@@ -132,7 +131,7 @@ class RpmPackageHandler:
 			if not os.path.exists(cmd_which):
 				raise FileNotFoundError("ERROR: which command not found!")
 		self._cmd_which = cmd_which
-		print 'INFO: Command which found at ' + self._cmd_which
+		self.logger.info('Command which found at ' + self._cmd_which)
 
 		self._detect_cmd_path('rpm')
 
@@ -142,11 +141,11 @@ class RpmPackageHandler:
 			raise FileNotFoundError("ERROR: which command not found!")
 
 		self._cmd_rpm = self._exec(self._cmd_which + " " + tool)
-		print 'INFO: Command ' + tool + ' found at ' + self._cmd_rpm
+		self.logger.info('Command ' + tool + ' found at ' + self._cmd_rpm)
 
 	def _exec(self, cmd):
-		#print 'Executing ' + cmd
-		return subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).strip();
+		self.logger.info('Executing ' + cmd)
+		return subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).strip()
 
 
 class RpmPkg:
