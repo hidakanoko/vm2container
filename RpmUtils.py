@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 
+import ast
 import os
 import subprocess
 
 from MessageUtils import ConsoleLogger
+
 
 class RpmPackageHandler:
 	"""
@@ -15,30 +17,39 @@ class RpmPackageHandler:
 		self._find_tools()
 		self._pkg_list = set()
 		self._dep_list = {}
-		self._query_full_name_cache = {}
-		self._query_name_cache = {}
+		self._query_pkg_cache = {}
 
-	def query_full_name(self, pkg_name):
-		if pkg_name in self._query_full_name_cache:
-			return self._query_full_name_cache[pkg_name]
+	def query_pkg(self, any_query_str):
+		# check if name exists
+		if any_query_str in self._query_pkg_cache:
+			return self._query_pkg_cache[any_query_str]
+
+		# check if full_name exists
+		for pkg_info in self._query_pkg_cache.values():
+			if any_query_str == pkg_info['full_name']:
+				return pkg_info
+
+		# not found, do query
 		try:
-			pkg_full_name = self._exec(self._cmd_rpm + ' -q "' + pkg_name + '"')
-			self._query_full_name_cache[pkg_name] = pkg_full_name
-			return self._query_full_name_cache[pkg_name]
+			cmd = self._cmd_rpm
+			cmd += ' -q "' + any_query_str
+			cmd += '" --qf "\\{\'name\' : \'%{NAME}\', \'version\' : \'%{VERSION}\','
+			cmd += ' \'release\' : \'%{RELEASE}\', \'arch\' : \'%{ARCH}\', \'requires\' : \'[%{REQUIRES},]\','
+			cmd += ' \'full_name\' : \'%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\'\\}"'
+			pkg_info = ast.literal_eval(self._exec(cmd))
+			self._query_pkg_cache[pkg_info['name']] = pkg_info
+			return self._query_pkg_cache[pkg_info['name']]
 		except subprocess.CalledProcessError as e:
-			self.logger.error(pkg_name + ' NOT installed on the system')
+			self.logger.error(any_query_str + ' NOT installed on the system')
 			return None
 
-	def query_name(self, query_name):
-		if query_name in self._query_name_cache:
-			return self._query_name_cache[query_name]
-		try:
-			pkg_name = self._exec(self._cmd_rpm + ' -q "' + query_name + '"')
-			self._query_name_cache[query_name] = pkg_name
-			return self._query_name_cache[query_name]
-		except subprocess.CalledProcessError as e:
-			self.logger.error(query_name + ' NOT installed on the system')
-			return None
+	def get_pkg_requires(self, pkg_name):
+		pkg_info = self.query_pkg(pkg_name)
+		requires = set()
+		for r in pkg_info['requires'].split(','):
+			if len(str(r).strip()) > 0:
+				requires.add(str(r).strip())
+		return requires
 
 	def show_deps(self, packages):
 		pkgs = []
@@ -47,12 +58,28 @@ class RpmPackageHandler:
 			if pkg is None:
 				pkg = RpmPkg(pkg_name)
 				self._pkg_list.add(pkg)
-			full_name = self.query_full_name(pkg_name)
+			pkg_info = self.query_pkg(pkg_name)
+			full_name = pkg_info['name']
 			if full_name is None:
 				continue
 			pkg.set_full_name(full_name)
 			pkgs.append(pkg)
+			self.logger.info('Resolving dependency for ' + pkg_name)
 			self._get_dep_pkgs(pkg)
+			self._print_dep_tree(pkg, 0, set())
+		self.logger.info('[*]=Child dependencies are omitted as already described above.')
+
+	def _print_dep_tree(self, pkg, indent_level, handled):
+		msg = (' ' * 4 * indent_level) + pkg.get_name()
+		if pkg in handled:
+			print(msg + ' [*]')
+			return
+		else:
+			print(msg)
+		handled.add(pkg)
+		indent_level += 1
+		for dep_obj in pkg.get_dep_pkgs():
+			self._print_dep_tree(dep_obj.pkg, indent_level, handled)
 
 	def get_a_provide_pkg(self, req):
 		dep_query_str = self._trim_dep_version(req)
@@ -70,17 +97,23 @@ class RpmPackageHandler:
 			return None
 
 	def _get_dep_pkgs(self, pkg):
-		reqs = self._exec(self._cmd_rpm + ' -q --requires ' + pkg.get_name())
-		if reqs is None or len(reqs.strip()) == 0:
+		#reqs = self._exec(self._cmd_rpm + ' -q --requires ' + pkg.get_name())
+		requires = self.get_pkg_requires(pkg.get_name())
+		if requires is None or len(requires) == 0:
 			return
-		for req in list(set(reqs.splitlines())):
+		for req in requires:
 			if self._is_rpmlib(req):
 				# "rpm -q --whatprovides XXX" don't handle rpmlib
 				# Add 'RPM' as dependency?
 				continue
 
 			dep_pkg_full_name = self.get_a_provide_pkg(req)
-			dep_pkg_name = self.query_name(dep_pkg_full_name)
+			pkg_info = self.query_pkg(dep_pkg_full_name)
+			dep_pkg_name = pkg_info['name']
+
+			if dep_pkg_name == pkg.get_name():
+				# don't handle the dependency if it is itself
+				continue
 
 			dep_pkg = self._get_rpm_pkg(dep_pkg_name)
 			if dep_pkg is None:
@@ -96,12 +129,12 @@ class RpmPackageHandler:
 
 			dep_obj.add_required_by(req)
 
-		for dep in pkg.get_dep_pkgs():
-			required_by = ''
-			for req in dep.required_by:
-				if len(required_by) > 0:
-					required_by += ', '
-				required_by += req
+		#for dep in pkg.get_dep_pkgs():
+		#	required_by = ''
+		#	for req in dep.required_by:
+		#		if len(required_by) > 0:
+		#			required_by += ', '
+		#		required_by += req
 
 	def _get_rpm_pkg(self, pkg_name):
 		for p in self._pkg_list:
@@ -144,7 +177,7 @@ class RpmPackageHandler:
 		self.logger.info('Command ' + tool + ' found at ' + self._cmd_rpm)
 
 	def _exec(self, cmd):
-		self.logger.info('Executing ' + cmd)
+		#self.logger.debug('Executing ' + cmd)
 		return subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).strip()
 
 
