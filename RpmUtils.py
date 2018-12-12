@@ -3,6 +3,9 @@
 import ast
 import os
 import subprocess
+import sys
+import threading
+import time
 
 from MessageUtils import ConsoleLogger
 
@@ -64,10 +67,22 @@ class RpmPackageHandler:
 				continue
 			pkg.set_full_name(full_name)
 			pkgs.append(pkg)
-			self.logger.info('Resolving dependency for ' + pkg_name)
-			self._get_dep_pkgs(pkg)
+
+			t = PrintProgressThread()
+			t.set_start_message('Resolving dependency for ' + pkg_name + '...')
+			try:
+				t.start()
+				self._get_dep_pkgs(pkg)
+			finally:
+				t.stop()
+				t.join(20)
+
 			self._print_dep_tree(pkg, 0, set())
+
 		self.logger.info('[*]=Child dependencies are omitted as already described above.')
+
+	def list_files(self, packages):
+		pkgs = []
 
 	def _print_dep_tree(self, pkg, indent_level, handled):
 		msg = (' ' * 4 * indent_level) + pkg.get_name()
@@ -80,6 +95,14 @@ class RpmPackageHandler:
 		indent_level += 1
 		for dep_obj in pkg.get_dep_pkgs():
 			self._print_dep_tree(dep_obj.pkg, indent_level, handled)
+
+	def _print_wait_cursor(self):
+		while True:
+			for cursor in '|/-\\':
+				sys.stdout.write(cursor + ' Calculating dependencies...')
+				sys.stdout.flush()
+				time.sleep(0.5)
+				sys.stdout.write('\r')
 
 	def get_a_provide_pkg(self, req):
 		dep_query_str = self._trim_dep_version(req)
@@ -215,4 +238,32 @@ class PkgDep:
 
 	def add_required_by(self, dep_str):
 		self.required_by.add(dep_str)
+
+
+class PrintProgressThread(threading.Thread):
+	def __init__(self):
+		super(PrintProgressThread, self).__init__()
+		self.stop_event = threading.Event()
+		self.setDaemon(True)
+		self._start_message = 'Thread running...'
+		self._end_message = 'done!'
+
+	def run(self):
+		while not self.stop_event.is_set():
+			for cursor in '|/-\\':
+				sys.stdout.write(cursor + self._start_message)
+				sys.stdout.flush()
+				time.sleep(0.5)
+				sys.stdout.write('\r')
+		if self._end_message is not None:
+			sys.stdout.write(self._end_message + '\n')
+
+	def set_start_message(self, start_message):
+		self._start_message = start_message
+
+	def set_end_message(self, end_message):
+		self._end_message = end_message
+
+	def stop(self):
+		self.stop_event.set()
 

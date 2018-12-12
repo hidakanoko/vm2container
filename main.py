@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import argparse
-import os
 
 from RpmUtils import RpmPackageHandler
+
 
 def handle_args():
 	parser = argparse.ArgumentParser(
@@ -13,6 +13,7 @@ def handle_args():
 
 	parser.add_argument('-p', '--package', type=str, action='append', required=True)
 	parser.add_argument('-s', '--showDeps', action='store_const', const=True, default=False)
+	parser.add_argument('-l', '--listFiles', action='store_const', const=True, default=False)
 	#parser.add_argument('-d', '--dest', type=str, default='/tmp/')
 	#parser.add_argument('-s', '--skipDownload', action='store_const', const=True, default=False)
 	#parser.add_argument('-o', '--detectObject', action='store_const', const=True, default=False)
@@ -22,9 +23,12 @@ def handle_args():
 	args = parser.parse_args()
 	return args
 
-arg = handle_args()
 
-if arg.showDeps == True:
-	rpm = RpmPackageHandler()
+arg = handle_args()
+rpm = RpmPackageHandler()
+
+if arg.showDeps:
 	rpm.show_deps(arg.package)
 
+if arg.listDeps:
+	rpm.list_files(arg.package)
