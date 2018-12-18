@@ -54,7 +54,36 @@ class RpmPackageHandler:
 				requires.add(str(r).strip())
 		return requires
 
+	def query_filelist(self, pkg_name):
+		try:
+			cmd = self._cmd_rpm + ' -ql "' + pkg_name + '"'
+			return self._exec(cmd).splitlines()
+		except subprocess.CalledProcessError as e:
+			self.logger.error(pkg_name + ' NOT installed on the system')
+			return None
+
 	def show_deps(self, packages):
+		pkgs = self._calculate_dependencies(packages)
+		for pkg in pkgs:
+			self._print_dep_tree(pkg, 0, set())
+		self.logger.info('[*]=Child dependencies are omitted as already described above.')
+
+	def list_files(self, packages):
+		pkgs = self._calculate_dependencies(packages)
+		filelist = set()
+		t = PrintProgressThread()
+		t.set_start_message('Collecting file list of ' + str(len(packages)) + ' package(s) and its dependent packages...')
+		try:
+			t.start()
+			for pkg in pkgs:
+				self._get_filelist(pkg, filelist, set())
+		finally:
+			t.stop()
+			t.join(20)
+		for f in sorted(filelist):
+			print(f)
+
+	def _calculate_dependencies(self, packages):
 		pkgs = []
 		for pkg_name in packages:
 			pkg = self._get_rpm_pkg(pkg_name)
@@ -76,13 +105,15 @@ class RpmPackageHandler:
 			finally:
 				t.stop()
 				t.join(20)
+		return pkgs
 
-			self._print_dep_tree(pkg, 0, set())
-
-		self.logger.info('[*]=Child dependencies are omitted as already described above.')
-
-	def list_files(self, packages):
-		pkgs = []
+	def _get_filelist(self, pkg, filelist, handled):
+		handled.add(pkg.get_name())
+		filelist.update(self.query_filelist(pkg.get_name()))
+		for pkg_dep in pkg.get_dep_pkgs():
+			if pkg_dep.pkg.get_name() in handled:
+				continue
+			self._get_filelist(pkg_dep.pkg, filelist, handled)
 
 	def _print_dep_tree(self, pkg, indent_level, handled):
 		msg = (' ' * 4 * indent_level) + pkg.get_name()
@@ -120,7 +151,6 @@ class RpmPackageHandler:
 			return None
 
 	def _get_dep_pkgs(self, pkg):
-		#reqs = self._exec(self._cmd_rpm + ' -q --requires ' + pkg.get_name())
 		requires = self.get_pkg_requires(pkg.get_name())
 		if requires is None or len(requires) == 0:
 			return
@@ -151,13 +181,6 @@ class RpmPackageHandler:
 				pkg.add_dep_pkg(dep_obj)
 
 			dep_obj.add_required_by(req)
-
-		#for dep in pkg.get_dep_pkgs():
-		#	required_by = ''
-		#	for req in dep.required_by:
-		#		if len(required_by) > 0:
-		#			required_by += ', '
-		#		required_by += req
 
 	def _get_rpm_pkg(self, pkg_name):
 		for p in self._pkg_list:
@@ -246,11 +269,11 @@ class PrintProgressThread(threading.Thread):
 		self.stop_event = threading.Event()
 		self.setDaemon(True)
 		self._start_message = 'Thread running...'
-		self._end_message = 'done!'
+		self._end_message = '\ndone!'
 
 	def run(self):
 		while not self.stop_event.is_set():
-			for cursor in '|/-\\':
+			for cursor in '\\|/-':
 				sys.stdout.write(cursor + self._start_message)
 				sys.stdout.flush()
 				time.sleep(0.5)

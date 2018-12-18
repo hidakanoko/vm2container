@@ -30,5 +30,5 @@ rpm = RpmPackageHandler()
 if arg.showDeps:
 	rpm.show_deps(arg.package)
 
-if arg.listDeps:
+if arg.listFiles:
 	rpm.list_files(arg.package)
