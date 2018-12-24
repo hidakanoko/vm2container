@@ -4,11 +4,11 @@ import ast
 import os
 import subprocess
 import sys
-import threading
 import time
 
+from CommandUtils import CommandExecutor
 from MessageUtils import ConsoleLogger
-
+from MessageUtils import PrintProgressThread
 
 class RpmPackageHandler:
 	"""
@@ -21,6 +21,7 @@ class RpmPackageHandler:
 		self._pkg_list = set()
 		self._dep_list = {}
 		self._query_pkg_cache = {}
+		self._ignore_list = set(['/boot', '/sys', '/proc', '/dev'])
 
 	def query_pkg(self, any_query_str):
 		# check if name exists
@@ -39,7 +40,7 @@ class RpmPackageHandler:
 			cmd += '" --qf "\\{\'name\' : \'%{NAME}\', \'version\' : \'%{VERSION}\','
 			cmd += ' \'release\' : \'%{RELEASE}\', \'arch\' : \'%{ARCH}\', \'requires\' : \'[%{REQUIRES},]\','
 			cmd += ' \'full_name\' : \'%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\'\\}"'
-			pkg_info = ast.literal_eval(self._exec(cmd))
+			pkg_info = ast.literal_eval(CommandExecutor.execute(cmd))
 			self._query_pkg_cache[pkg_info['name']] = pkg_info
 			return self._query_pkg_cache[pkg_info['name']]
 		except subprocess.CalledProcessError as e:
@@ -57,10 +58,25 @@ class RpmPackageHandler:
 	def query_filelist(self, pkg_name):
 		try:
 			cmd = self._cmd_rpm + ' -ql "' + pkg_name + '"'
-			return self._exec(cmd).splitlines()
+			package_files = CommandExecutor.execute(cmd)
+			if self._has_no_file(package_files):
+				return []
+			else:
+				filelist = package_files.splitlines()
+				self._remove_ignored_files(filelist)
+				return filelist
 		except subprocess.CalledProcessError as e:
 			self.logger.error(pkg_name + ' NOT installed on the system')
 			return None
+
+	def _has_no_file(self, filelist_str):
+		return bool(str(filelist_str).find('(contains no files)') >= 0)
+
+	def _remove_ignored_files(self, filelist):
+		for f in filelist[:]:
+			for ignore_file in self._ignore_list:
+				if str(f).startswith(ignore_file):
+					filelist.remove(f)
 
 	def show_deps(self, packages):
 		pkgs = self._calculate_dependencies(packages)
@@ -68,7 +84,7 @@ class RpmPackageHandler:
 			self._print_dep_tree(pkg, 0, set())
 		self.logger.info('[*]=Child dependencies are omitted as already described above.')
 
-	def list_files(self, packages):
+	def list_files(self, packages, print_filelist=False):
 		pkgs = self._calculate_dependencies(packages)
 		filelist = set()
 		t = PrintProgressThread()
@@ -80,8 +96,20 @@ class RpmPackageHandler:
 		finally:
 			t.stop()
 			t.join(20)
-		for f in sorted(filelist):
-			print(f)
+		filelist_sorted = sorted(filelist)
+		count_deleted = 0
+		for f in filelist_sorted:
+			print_message = f
+			if not os.path.exists(f):
+				count_deleted += 1
+				print_message += ' (not found)'
+			if print_filelist:
+				print(print_message)
+		print_message = 'Total ' + str(len(filelist_sorted)) + ' file(s) found'
+		if count_deleted > 0:
+			print_message += ', however ' + str(count_deleted) + ' file(s) are not found in the file system'
+		self.logger.info(print_message)
+		return filelist_sorted
 
 	def _calculate_dependencies(self, packages):
 		pkgs = []
@@ -105,6 +133,7 @@ class RpmPackageHandler:
 			finally:
 				t.stop()
 				t.join(20)
+		self.logger.info('Total ' + str(len(self._query_pkg_cache)) + ' package(s) found')
 		return pkgs
 
 	def _get_filelist(self, pkg, filelist, handled):
@@ -140,7 +169,7 @@ class RpmPackageHandler:
 		if dep_query_str in self._dep_list:
 			return self._dep_list[dep_query_str]
 		try:
-			provide_pkgs = self._exec(self._cmd_rpm + ' -q --whatprovides "' + dep_query_str + '"')
+			provide_pkgs = CommandExecutor.execute(self._cmd_rpm + ' -q --whatprovides "' + dep_query_str + '"')
 			if provide_pkgs is None or len(provide_pkgs.strip()) == 0:
 				self.logger.warn('No package provides dependency ' + req)
 				return None
@@ -165,7 +194,7 @@ class RpmPackageHandler:
 			dep_pkg_name = pkg_info['name']
 
 			if dep_pkg_name == pkg.get_name():
-				# don't handle the dependency if it is itself
+				# don't handle itself
 				continue
 
 			dep_pkg = self._get_rpm_pkg(dep_pkg_name)
@@ -204,27 +233,7 @@ class RpmPackageHandler:
 		return pkg_name.startswith('rpmlib')
 
 	def _find_tools(self):
-		cmd_which = "/usr/bin/which"
-		if not os.path.exists(cmd_which):
-			cmd_which = "/bin/which"
-			if not os.path.exists(cmd_which):
-				raise FileNotFoundError("ERROR: which command not found!")
-		self._cmd_which = cmd_which
-		self.logger.info('Command which found at ' + self._cmd_which)
-
-		self._detect_cmd_path('rpm')
-
-	def _detect_cmd_path(self, tool):
-		# check if "which" is detected
-		if self._cmd_which is None:
-			raise FileNotFoundError("ERROR: which command not found!")
-
-		self._cmd_rpm = self._exec(self._cmd_which + " " + tool)
-		self.logger.info('Command ' + tool + ' found at ' + self._cmd_rpm)
-
-	def _exec(self, cmd):
-		#self.logger.debug('Executing ' + cmd)
-		return subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).strip()
+		self._cmd_rpm = CommandExecutor.find_tool('rpm')
 
 
 class RpmPkg:
@@ -261,32 +270,3 @@ class PkgDep:
 
 	def add_required_by(self, dep_str):
 		self.required_by.add(dep_str)
-
-
-class PrintProgressThread(threading.Thread):
-	def __init__(self):
-		super(PrintProgressThread, self).__init__()
-		self.stop_event = threading.Event()
-		self.setDaemon(True)
-		self._start_message = 'Thread running...'
-		self._end_message = '\ndone!'
-
-	def run(self):
-		while not self.stop_event.is_set():
-			for cursor in '\\|/-':
-				sys.stdout.write(cursor + self._start_message)
-				sys.stdout.flush()
-				time.sleep(0.5)
-				sys.stdout.write('\r')
-		if self._end_message is not None:
-			sys.stdout.write(self._end_message + '\n')
-
-	def set_start_message(self, start_message):
-		self._start_message = start_message
-
-	def set_end_message(self, end_message):
-		self._end_message = end_message
-
-	def stop(self):
-		self.stop_event.set()
-
