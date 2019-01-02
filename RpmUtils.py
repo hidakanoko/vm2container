@@ -107,7 +107,7 @@ class RpmPackageHandler:
                 print(print_message)
         print_message = 'Total ' + str(len(filelist_sorted)) + ' file(s) found'
         if count_deleted > 0:
-            print_message += ', however ' + str(count_deleted) + ' file(s) are not found in the file system'
+            print_message += ', however ' + str(count_deleted) + ' file(s) are not present in the file system'
         self.logger.info(print_message)
         return filelist_sorted
 
