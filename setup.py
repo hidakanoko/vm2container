@@ -12,7 +12,7 @@ with open('LICENSE') as f:
 setup(
     name='v2c',
     version='0.1.0',
-    description='Create container archive from running Linux machine',
+    description='Create container image from running Linux machine',
     long_description=readme,
     author='Kazuhiro Takahashi',
     author_email='hidakanoko.k7@gmail.com',

@@ -3,12 +3,10 @@
 import ast
 import os
 import subprocess
-import sys
-import time
 
-from CommandUtils import CommandExecutor
-from MessageUtils import ConsoleLogger
-from MessageUtils import PrintProgressThread
+from .command import CommandExecutor
+from .message import ConsoleLogger
+from .message import PrintProgressThread
 
 class RpmPackageHandler:
     """

@@ -3,8 +3,8 @@
 
 import argparse
 
-from ArchiveUtils import ArchiveHandler
-from RpmUtils import RpmPackageHandler
+from . import archive
+from . import rpm
 
 
 def handle_args():
@@ -26,7 +26,7 @@ def handle_args():
 
 
 arg = handle_args()
-rpm = RpmPackageHandler()
+rpm = rpm.RpmPackageHandler()
 
 if arg.showDeps:
     rpm.show_deps(arg.package)
@@ -38,5 +38,5 @@ if arg.listFiles:
 if arg.createArchive:
     if filelist is None:
         filelist = rpm.list_files(arg.package, False)
-    archive_handler = ArchiveHandler()
+    archive_handler = archive.ArchiveHandler()
     archive_handler.create_archive(filelist)

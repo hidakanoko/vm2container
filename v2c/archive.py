@@ -3,11 +3,10 @@
 import os
 import subprocess
 import tempfile
-import time
 
-from CommandUtils import CommandExecutor
-from MessageUtils import ConsoleLogger
-from MessageUtils import PrintProgressThread
+from .command import CommandExecutor
+from .message import ConsoleLogger
+from .message import PrintProgressThread
 
 
 class ArchiveHandler:
@@ -46,3 +45,7 @@ class ArchiveHandler:
             CommandExecutor.execute(cmd)
         except subprocess.CalledProcessError as e:
             self.logger.warn('Archive creation failed with status code ' + str(e.returncode))
+
+
+def stretch_parent_path(path):
+    return path
