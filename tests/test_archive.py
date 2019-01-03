@@ -8,7 +8,7 @@ import unittest
 from nose.tools import ok_, eq_, raises
 
 from v2c.archive import stretch_parent_path
-
+from v2c.archive import remove_leading_slash
 
 class TestArchive(unittest.TestCase):
 
@@ -50,3 +50,17 @@ class TestArchive(unittest.TestCase):
 
         # when, then
         eq_(stretch_parent_path(file_under_symlink_dir), realpath)
+
+    def test_remove_leading_slash__remove_leading_slash_given_path_starts_with_slash(self):
+        # given
+        path = '/path/to/file'
+
+        # when, then
+        eq_(remove_leading_slash(path), 'path/to/file')
+
+    def test_remove_leading_slash__do_nothing_given_path_does_NOT_start_with_slash(self):
+        # given
+        path = 'path/to/file'
+
+        # when, then
+        eq_(remove_leading_slash(path), 'path/to/file')

@@ -8,6 +8,7 @@ from .command import CommandExecutor
 from .message import ConsoleLogger
 from .message import PrintProgressThread
 
+
 class RpmPackageHandler:
     """
     This class handles RPM package
