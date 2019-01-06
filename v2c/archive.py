@@ -3,6 +3,7 @@
 import os
 import subprocess
 import tempfile
+import time
 
 from .command import CommandExecutor
 from .message import ConsoleLogger
@@ -35,13 +36,14 @@ class ArchiveHandler:
             if os.path.exists(f):
                 line_count += 1
                 filelist.write(remove_leading_slash(stretch_parent_path(f)) + '\n')
-                if line_count % 1000 == 0:
+                if line_count % 100 == 0:
                     filelist.flush()
+        filelist.flush()
 
     def _create_archive(self, filelist_path, dest, gzip=True):
         cmd = 'cd / ; ' + self._cmd_tar + ' c'
         if gzip:
-            cmd+= 'z'
+            cmd += 'z'
         cmd += 'f ' + dest + ' -T '\
                 + filelist_path\
                 + ' --no-recursion --numeric-owner'
