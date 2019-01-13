@@ -6,11 +6,10 @@ import shutil
 import tempfile
 import unittest
 from nose.tools import ok_, eq_, raises
+from v2c.dir import remove_trailing_slash, stretch_parent_path, remove_leading_slash
 
-from v2c.archive import stretch_parent_path
-from v2c.archive import remove_leading_slash
 
-class TestArchive(unittest.TestCase):
+class TestDir(unittest.TestCase):
 
     def setUp(self):
         # check platform
@@ -64,3 +63,23 @@ class TestArchive(unittest.TestCase):
 
         # when, then
         eq_(remove_leading_slash(path), 'path/to/file')
+
+    def test_remove_trailing_slash__remove_trailing_slash(self):
+        # given
+        path = "/etc/httpd/"
+
+        # when
+        ret = remove_trailing_slash(path)
+
+        # then
+        eq_(ret, "/etc/httpd")
+
+    def test_remove_trailing_slash__do_nothing_given_last_char_is_NOT_slash(self):
+        # given
+        path = "/etc/httpd"
+
+        # when
+        ret = remove_trailing_slash(path)
+
+        # then
+        eq_(ret, "/etc/httpd")

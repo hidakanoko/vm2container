@@ -87,7 +87,8 @@ class RpmPackageHandler:
         pkgs = self._calculate_dependencies(packages)
         filelist = set()
         t = PrintProgressThread()
-        t.set_start_message('Collecting file list of ' + str(len(packages)) + ' package(s) and its dependent packages...')
+        t.set_start_message('Creating file list of ' + str(len(packages))
+                            + ' package(s) and its dependent packages...')
         try:
             t.start()
             for pkg in pkgs:
