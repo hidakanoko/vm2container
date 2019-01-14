@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import os
+from v2c.message import info
 
 
 def list_files(dirs, print_filelist=False):
-    print('Creating file list in ' + str(len(dirs)) + ' directories...')
+    info('Creating file list in ' + str(len(dirs)) + ' directories...')
     entries = set()
     for d in dirs:
         entries.update(__get_filelist_recursive(d))
@@ -12,7 +13,7 @@ def list_files(dirs, print_filelist=False):
     if print_filelist:
         for e in entries_sorted:
             print(e)
-    print('Total ' + str(len(entries)) + ' entries found.')
+    info('Total ' + str(len(entries)) + ' entries found.')
     return entries_sorted
 
 

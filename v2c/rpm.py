@@ -4,9 +4,8 @@ import ast
 import os
 import subprocess
 
-from .command import CommandExecutor
-from .message import ConsoleLogger
-from .message import PrintProgressThread
+from v2c import command
+from v2c.message import info, warn, error, PrintProgressThread
 
 
 class RpmPackageHandler:
@@ -15,7 +14,6 @@ class RpmPackageHandler:
     """
 
     def __init__(self):
-        self.logger = ConsoleLogger.get_instance()
         self._find_tools()
         self._pkg_list = set()
         self._dep_list = {}
@@ -39,11 +37,11 @@ class RpmPackageHandler:
             cmd += '" --qf "\\{\'name\' : \'%{NAME}\', \'version\' : \'%{VERSION}\','
             cmd += ' \'release\' : \'%{RELEASE}\', \'arch\' : \'%{ARCH}\', \'requires\' : \'[%{REQUIRES},]\','
             cmd += ' \'full_name\' : \'%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\'\\}"'
-            pkg_info = ast.literal_eval(CommandExecutor.execute(cmd))
+            pkg_info = ast.literal_eval(command.execute(cmd))
             self._query_pkg_cache[pkg_info['name']] = pkg_info
             return self._query_pkg_cache[pkg_info['name']]
         except subprocess.CalledProcessError as e:
-            self.logger.error(any_query_str + ' NOT installed on the system')
+            error(any_query_str + ' NOT installed on the system')
             return None
 
     def get_pkg_requires(self, pkg_name):
@@ -57,7 +55,7 @@ class RpmPackageHandler:
     def query_filelist(self, pkg_name):
         try:
             cmd = self._cmd_rpm + ' -ql "' + pkg_name + '"'
-            package_files = CommandExecutor.execute(cmd)
+            package_files = command.execute(cmd)
             if self._has_no_file(package_files):
                 return []
             else:
@@ -65,7 +63,7 @@ class RpmPackageHandler:
                 self._remove_ignored_files(filelist)
                 return filelist
         except subprocess.CalledProcessError as e:
-            self.logger.error(pkg_name + ' NOT installed on the system')
+            error(pkg_name + ' NOT installed on the system')
             return None
 
     def _has_no_file(self, filelist_str):
@@ -81,7 +79,7 @@ class RpmPackageHandler:
         pkgs = self._calculate_dependencies(packages)
         for pkg in pkgs:
             self._print_dep_tree(pkg, 0, set())
-        self.logger.info('[*]=Child dependencies are omitted as already described above.')
+        info('[*]=Child dependencies are omitted as already described above.')
 
     def list_files(self, packages, print_filelist=False):
         pkgs = self._calculate_dependencies(packages)
@@ -108,7 +106,7 @@ class RpmPackageHandler:
         print_message = 'Total ' + str(len(filelist_sorted)) + ' file(s) found'
         if count_deleted > 0:
             print_message += ', however ' + str(count_deleted) + ' file(s) are not present in the file system'
-        self.logger.info(print_message)
+        info(print_message)
         return filelist_sorted
 
     def _calculate_dependencies(self, packages):
@@ -133,7 +131,7 @@ class RpmPackageHandler:
             finally:
                 t.stop()
                 t.join(20)
-        self.logger.info('Total ' + str(len(self._query_pkg_cache)) + ' package(s) found')
+        info('Total ' + str(len(self._query_pkg_cache)) + ' package(s) found')
         return pkgs
 
     def _get_filelist(self, pkg, filelist, handled):
@@ -161,14 +159,14 @@ class RpmPackageHandler:
         if dep_query_str in self._dep_list:
             return self._dep_list[dep_query_str]
         try:
-            provide_pkgs = CommandExecutor.execute(self._cmd_rpm + ' -q --whatprovides "' + dep_query_str + '"')
+            provide_pkgs = command.execute(self._cmd_rpm + ' -q --whatprovides "' + dep_query_str + '"')
             if provide_pkgs is None or len(provide_pkgs.strip()) == 0:
-                self.logger.warn('No package provides dependency ' + req)
+                warn('No package provides dependency ' + req)
                 return None
             self._dep_list[dep_query_str] = provide_pkgs.strip().splitlines()[0]
             return self._dep_list[dep_query_str]
         except subprocess.CalledProcessError as e:
-            self.logger.error('Cannot get packages which provides requirement ' + req)
+            error('Cannot get packages which provides requirement ' + req)
             return None
 
     def _get_dep_pkgs(self, pkg):
@@ -225,7 +223,7 @@ class RpmPackageHandler:
         return pkg_name.startswith('rpmlib')
 
     def _find_tools(self):
-        self._cmd_rpm = CommandExecutor.find_tool('rpm')
+        self._cmd_rpm = command.find_tool('rpm')
 
 
 class RpmPkg:
