@@ -20,7 +20,6 @@ def execute(cmd):
 
 
 def find_tool(tool_name):
-    detect_which()
     return execute(detect_which() + " " + tool_name)
 
 

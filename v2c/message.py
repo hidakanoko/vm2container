@@ -36,7 +36,7 @@ class PrintProgressThread(threading.Thread):
 
     def run(self):
         while not self.stop_event.is_set():
-            for cursor in ['*  ', ' * ', '  *']:
+            for cursor in ['  *', '*  ', ' * ']:
                 sys.stdout.write(cursor + self._start_message)
                 sys.stdout.flush()
                 time.sleep(0.5)

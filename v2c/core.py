@@ -3,6 +3,7 @@ import argparse
 from . import archive
 from . import dir
 from . import rpm
+from . import pkg
 from . import message
 
 
@@ -25,7 +26,7 @@ def handle_args():
 def create_filelist(arg, print_filelist=False):
     files = set()
     if arg.package is not None:
-        files.update(rpm.list_files(arg.package, print_filelist))
+        files.update(pkg_handler.list_files(arg.package, print_filelist))
     if arg.directory is not None:
         files.update(dir.list_files(arg.directory, print_filelist))
 
@@ -37,6 +38,13 @@ def check_args(arg):
         message.error("no packages nor directories are specified. exiting.")
         exit(1)
 
+def get_instance():
+    if pkg.is_rpm_environment():
+        return rpm.RpmPackageHandler()
+    elif pkg.is_deb_environment():
+        raise ModuleNotFoundError()
+    else:
+        raise NotImplementedError()
 
 arg = handle_args()
 
@@ -44,10 +52,10 @@ message.configure_logger(log_level=arg.verbose)
 
 check_args(arg)
 
-rpm = rpm.RpmPackageHandler()
+pkg_handler = get_instance()
 
 if arg.showDeps:
-    rpm.show_deps(arg.package)
+    pkg_handler.show_deps(arg.package)
 
 filelist = None
 if arg.listFiles:
