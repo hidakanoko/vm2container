@@ -5,16 +5,17 @@ import os
 import subprocess
 
 from v2c import command
+from v2c.pkg import PkgInfo, DepInfo, PackageHandler
 from v2c.message import info, warn, error, PrintProgressThread
 
 
-class RpmPackageHandler:
+class RpmPackageHandler(PackageHandler):
     """
     This class handles RPM package
     """
 
     def __init__(self):
-        self._find_tools()
+        super(RpmPackageHandler, self).__init__()
         self._pkg_list = set()
         self._dep_list = {}
         self._query_pkg_cache = {}
@@ -114,7 +115,7 @@ class RpmPackageHandler:
         for pkg_name in packages:
             pkg = self._get_rpm_pkg(pkg_name)
             if pkg is None:
-                pkg = RpmPkg(pkg_name)
+                pkg = PkgInfo(pkg_name)
                 self._pkg_list.add(pkg)
             pkg_info = self.query_pkg(pkg_name)
             full_name = pkg_info['name']
@@ -189,14 +190,14 @@ class RpmPackageHandler:
 
             dep_pkg = self._get_rpm_pkg(dep_pkg_name)
             if dep_pkg is None:
-                dep_pkg = RpmPkg(dep_pkg_name)
+                dep_pkg = PkgInfo(dep_pkg_name)
                 dep_pkg.set_full_name(dep_pkg_full_name)
                 self._pkg_list.add(dep_pkg)
                 self._get_dep_pkgs(dep_pkg)
 
             dep_obj = pkg.find_dependency(dep_pkg_name)
             if dep_obj is None:
-                dep_obj = PkgDep(dep_pkg)
+                dep_obj = DepInfo(dep_pkg)
                 pkg.add_dep_pkg(dep_obj)
 
             dep_obj.add_required_by(req)
@@ -225,38 +226,3 @@ class RpmPackageHandler:
     def _find_tools(self):
         self._cmd_rpm = command.find_tool('rpm')
 
-
-class RpmPkg:
-    def __init__(self, name):
-        self._name = name
-        self._deps = set()
-
-    def set_full_name(self, full_name):
-        self._full_name = full_name
-
-    def get_name(self):
-        return self._name
-
-    def get_full_name(self):
-        return self._full_name
-
-    def add_dep_pkg(self, p):
-        self._deps.add(p)
-
-    def get_dep_pkgs(self):
-        return self._deps
-
-    def find_dependency(self, pkg_name):
-        for pkg_dep in self.get_dep_pkgs():
-            if pkg_dep.pkg.get_name() == pkg_name:
-                return pkg_dep
-        return None
-
-
-class PkgDep:
-    def __init__(self, pkg):
-        self.pkg = pkg
-        self.required_by = set()
-
-    def add_required_by(self, dep_str):
-        self.required_by.add(dep_str)
